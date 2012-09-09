@@ -3,6 +3,7 @@ package com.tombrus.vthundred.screen;
 import com.tombrus.vthundred.terminal.*;
 import com.tombrus.vthundred.terminal.CharProps.*;
 import com.tombrus.vthundred.terminal.input.*;
+import com.tombrus.vthundred.terminal.types.*;
 import com.tombrus.vthundred.util.*;
 
 import java.util.*;
@@ -17,7 +18,7 @@ public class ScreenImpl implements Screen {
     private       volatile boolean                     running;
     private final          Terminal                    terminal;
 
-    private final          List<ResizeHandler> resizeHandlers = new ArrayList<ResizeHandler>();
+    private final          List<ResizeHandler>         resizeHandlers         = new ArrayList<ResizeHandler>();
     private                int                         currentScreenSizeX;
     private                int                         currentScreenSizeY;
     private final          AtomicReference<TerminalXY> newScreenSize          = new AtomicReference<TerminalXY>();
@@ -60,13 +61,14 @@ public class ScreenImpl implements Screen {
 
     @Override
     public TerminalXY getScreenSize () {
-        lock.lock();
-        try {
-            startScreen();
-            return new TerminalXY(currentScreenSizeX, currentScreenSizeY);
-        } finally {
-            lock.unlock();
-        }
+        final TerminalXY[] result = new TerminalXY[1];
+        run(new Runnable() {
+            @Override
+            public void run () {
+                result[0] = new TerminalXY(currentScreenSizeX, currentScreenSizeY);
+            }
+        });
+        return result[0];
     }
 
     @Override
@@ -99,59 +101,130 @@ public class ScreenImpl implements Screen {
     }
 
     @Override
-    public void setUserCursor (TerminalXY loc) {
+    public void setUserCursor (final TerminalXY loc) {
         if (loc ==null) {
             throw new IllegalArgumentException("user cursor location may not be null");
         }
-        lock.lock();
-        try {
-            startScreen();
-            if (!userCursor.equals(loc)) {
-                userCursor = loc;
-                requestRefresh(false);
+        run(new Runnable() {
+            @Override
+            public void run () {
+                if (!userCursor.equals(loc)) {
+                    userCursor = loc;
+                    requestRefresh();
+                }
             }
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     @Override
-    public void setBackgroundColor (Color color) {
+    public void setBackgroundColor (final Color color) {
         if (color ==null) {
             throw new IllegalArgumentException("background color may not be null");
         }
-        lock.lock();
-        try {
-            startScreen();
-            backgroundColor = color;
-            requestRefresh(true);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Erases all the characters on the screen, effectively giving you a blank
-     * area. The default background color will be used, if you want to fill the
-     * screen with a different color you will need to do this manually.
-     */
-    @Override
-    public void clear () {
-        lock.lock();
-        try {
-            startScreen();
-            for (int y = 0; y<currentScreenSizeY; y++) {
-                Arrays.fill(requestedScreen[y], null);
+        run(new Runnable() {
+            @Override
+            public void run () {
+                backgroundColor = color;
+                requestRefreshWholeScreen();
             }
-            requestRefresh(true);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
-    @Override
-    public ScreenWriter getNewScreenWriter () {
-        return new ScreenWriterImpl();
+    private void fill (final int x, final int y, final int w, final int h, final ScreenCharacter sc) {
+        run(new Runnable() {
+            @Override
+            public void run () {
+                int fx = limit(0, x, currentScreenSizeX    );
+                int fy = limit(0, y, currentScreenSizeY    );
+                int tx = limit(fx, x +w, currentScreenSizeX);
+                int ty = limit(fy, y +h, currentScreenSizeY);
+
+                for (int line = fy; line<ty; line++) {
+                    Arrays.fill(requestedScreen[line], fx, tx, sc);
+                    Arrays.fill(dirtyChars[line], fx, tx, true   );
+                    dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx-1);
+                    dirtyLowChar[line]  = Math.min(dirtyLowChar[line], fx);
+                    dirtyLine[line]     = true;
+                }
+                dirtyHighLine  = Math.max(dirtyHighLine, ty-1);
+                dirtyLowLine   = Math.min(dirtyLowLine, fy);
+                dirtySomething = true;
+
+                if ((tx-fx) *(ty-fy) >2 *currentScreenSizeX *currentScreenSizeY) {
+                    requestRefreshWholeScreen();
+                }else {
+                    requestRefresh();
+                }
+            }
+        });
+    }
+
+    private void scrollUp (final int x, final int y, final int w, final int h, final int d) {
+        run(new Runnable() {
+            @Override
+            public void run () {
+                final int fx        = limit(0, x, currentScreenSizeX    );
+                final int fy        = limit(0, y, currentScreenSizeY    );
+                final int tx        = limit(fx, x +w, currentScreenSizeX);
+                final int ty        = limit(fy, y +h, currentScreenSizeY);
+
+                final int copyWidth = tx -fx;
+
+                if (h <=d) {
+                    // nothing to copy, only clear
+                    fill(x, y, w, h, null);
+                }else {
+                    for (int line = fy; line<ty; line++) {
+                        final ScreenCharacter[] srcLine = requestedScreen[line+d];
+                        final ScreenCharacter[] trgLine = requestedScreen[line];
+                        if (line <ty -d) {
+                            System.arraycopy(srcLine, fx, trgLine, fx, copyWidth);
+                        }else {
+                            Arrays.fill(trgLine, fx, tx, null);
+                        }
+                        Arrays.fill(dirtyChars[line], fx, tx, true);
+                        dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx-1);
+                        dirtyLowChar[line]  = Math.min(dirtyLowChar[line], fx);
+                        dirtyLine[line]     = true;
+                    }
+                    dirtyHighLine  = Math.max(dirtyHighLine, ty-1);
+                    dirtyLowLine   = Math.min(dirtyLowLine, fy);
+                    dirtySomething = true;
+                }
+                requestRefresh();
+            }
+        });
+    }
+
+    private void border (final int x, final int y, final int w, final int h, final CharProps p) {
+        run(new Runnable() {
+            @Override
+            public void run () {
+                final int fx = limit(0, x, currentScreenSizeX    );
+                final int fy = limit(0, y, currentScreenSizeY    );
+                final int tx = limit(fx, x +w, currentScreenSizeX);
+                final int ty = limit(fy, y +h, currentScreenSizeY);
+
+                setReqChar(fx, fy, AnsiGraphics.SINGLE_LINE_UP_LEFT_CORNER, p);
+                for (int xx = fx+1; xx<tx-1; xx++) {
+                    setReqChar(xx, fy, AnsiGraphics.SINGLE_LINE_HORIZONTAL, p);
+                }
+                setReqChar(tx -1, fy, AnsiGraphics.SINGLE_LINE_UP_RIGHT_CORNER, p);
+                for (int yy = fy+1; yy<ty-1; yy++) {
+                    setReqChar(fx, yy, AnsiGraphics.SINGLE_LINE_VERTICAL, p   );
+                    setReqChar(tx -1, yy, AnsiGraphics.SINGLE_LINE_VERTICAL, p);
+                }
+                setReqChar(fx, ty -1, AnsiGraphics.SINGLE_LINE_LOW_LEFT_CORNER, p);
+                for (int xx = fx+1; xx<tx-1; xx++) {
+                    setReqChar(xx, ty -1, AnsiGraphics.SINGLE_LINE_HORIZONTAL, p);
+                }
+                setReqChar(tx -1, ty -1, AnsiGraphics.SINGLE_LINE_LOW_RIGHT_CORNER, p);
+            }
+        });
+    }
+
+    private int limit (int lo, int v, int hi) {
+        return v <lo ? lo : v <hi ? v : hi;
     }
 
     @Override
@@ -188,21 +261,32 @@ public class ScreenImpl implements Screen {
         terminal.removeKeyHandler(h);
     }
 
-    private void resizeDetected (TerminalXY newSize) {
-        List<ResizeHandler> clone;
-        synchronized (resizeHandlers) {
-            clone = new ArrayList<ResizeHandler>(resizeHandlers);
-        }
-        for (ResizeHandler resizeHandler : clone) {
-            resizeHandler.handleResize(newSize);
-        }
+    @Override
+    public ScreenWriter getNewScreenWriter () {
+        return new ScreenWriterImpl(0, 0, currentScreenSizeX, currentScreenSizeY);
+    }
+
+    @Override
+    public ScreenWriter getNewScreenWriter (int x, int y, int w, int h) {
+        return new ScreenWriterImpl(x, y, w, h);
     }
 
     public class ScreenWriterImpl implements ScreenWriter {
-        private int          reqX;
-        private int          reqY;
-        private CharProps    reqProps     = CharProps.DEFAULT;
-        private TabBehaviour tabBehaviour = TabBehaviour.ALIGN_8;
+        private final int          subX;
+        private final int          subY;
+        private final int          subW;
+        private final int          subH;
+        private       int          cursorX;
+        private       int          cursorY;
+        private       CharProps    cursorProps  = CharProps.DEFAULT;
+        private       TabBehaviour tabBehaviour = TabBehaviour.ALIGN_4;
+
+        public ScreenWriterImpl (int subX, int subY, int subW, int subH) {
+            this.subX = subX;
+            this.subY = subY;
+            this.subW = subW;
+            this.subH = subH;
+        }
 
         @Override
         public void setTabBehaviour (TabBehaviour tabBehaviour) {
@@ -223,40 +307,92 @@ public class ScreenImpl implements Screen {
                     if (o instanceof Integer) {
                         int xy = (Integer) o;
                         if (intIsX) {
-                            reqX = xy;
+                            cursorX = Math.max(0, Math.min(xy, subW -1));
                         }else {
-                            reqY = xy;
+                            cursorY = Math.max(0, Math.min(xy, subH -1));
                         }
                         intIsX = !intIsX;
                     }else if (o instanceof TerminalXY) {
                         TerminalXY xy = (TerminalXY) o;
-                        reqX   = xy.getX();
-                        reqY   = xy.getY();
-                        intIsX = true;
+                        cursorX = Math.max(0, Math.min(xy.getX(), subW -1));
+                        cursorY = Math.max(0, Math.min(xy.getY(), subH -1));
+                        intIsX  = true;
                     }else if (o instanceof CharProps) {
-                        reqProps = (CharProps) o;
-                        intIsX   = true;
+                        cursorProps = (CharProps) o;
+                        intIsX      = true;
                     }else if (o instanceof CharPropsChanger) {
-                        reqProps = ((CharPropsChanger) o).change(reqProps);
-                        intIsX   = true;
+                        cursorProps = ((CharPropsChanger) o).change(cursorProps);
+                        intIsX      = true;
                     }else if (o ==SET_USER_CURSOR) {
-                        setUserCursor(new TerminalXY(reqX, reqY));
+                        setUserCursor(new TerminalXY(subX +cursorX, subY +cursorY));
                     }else {
-                        String str = o ==null ? "null" : o.toString();
-                        str = tabBehaviour.replaceTabs(str, reqX);
-                        for (char c : str.toCharArray()) {
-                            setReqChar(reqX, reqY, c, reqProps);
-                            reqX++;
+                        if (0 <=cursorY && cursorY <subH) {
+                            String str = o ==null ? "null" : o.toString();
+                            str = tabBehaviour.replaceTabs(str, cursorX);
+                            for (char c : str.toCharArray()) {
+                                if (c =='\n') {
+                                    cursorX = 0;
+                                    if (cursorY <subH -1) {
+                                        cursorY++;
+                                    }else {
+                                        scrollUp();
+                                        clear(0, subH -1, subW, 1);
+                                    }
+                                }else if (0 <=cursorX && cursorX <subW) {
+                                    setReqChar(subX +cursorX, subY +cursorY, c, cursorProps);
+                                    cursorX++;
+                                }
+                            }
                         }
                         intIsX = true;
                     }
                 }
                 if (!wasDirty && dirtySomething) {
-                    requestRefresh(false);
+                    requestRefresh();
                 }
             } finally {
                 lock.unlock();
             }
+        }
+
+        @Override
+        public void clear () {
+            fill(null);
+        }
+
+        @Override
+        public void clear (int x, int y, int w, int h) {
+            fill(x, y, w, h, null);
+        }
+
+        @Override
+        public void fill (ScreenCharacter sc) {
+            fill(0, 0, subW, subH, sc);
+        }
+
+        @Override
+        public void fill (int x, int y, int w, int h, ScreenCharacter sc) {
+            ScreenImpl.this.fill(subX +x, subY +y, w, h, sc);
+        }
+
+        @Override
+        public void scrollUp () {
+            ScreenImpl.this.scrollUp(subX, subY, subW, subH, 1);
+        }
+
+        @Override
+        public void border (CharProps p) {
+            ScreenImpl.this.border(subX -1, subY -1, subW +2, subH +2, p);
+        }
+    }
+
+    private void resizeDetected (TerminalXY newSize) {
+        List<ResizeHandler> clone;
+        synchronized (resizeHandlers) {
+            clone = new ArrayList<ResizeHandler>(resizeHandlers);
+        }
+        for (ResizeHandler resizeHandler : clone) {
+            resizeHandler.handleResize(newSize);
         }
     }
 
@@ -346,7 +482,7 @@ public class ScreenImpl implements Screen {
     private void resizeScreenIfNeeded () {
         TerminalXY newSize = newScreenSize.getAndSet(null);
         if (newSize !=null && (newSize.getX()!=currentScreenSizeX || newSize.getY()!=currentScreenSizeY)) {
-            DB.t("\n<screen-resize:["+currentScreenSizeX+","+currentScreenSizeY+"]=>"+newSize+">  ");
+            DB.t("\n<screen-resize:["+currentScreenSizeX+","+currentScreenSizeY +"]=>" +newSize +">  ");
             final int                 numLines           = newSize.getY();
             final int                 numChars           = newSize.getX();
             final int                 numCharsToCopy     = Math.min(currentScreenSizeX, numChars);
@@ -373,9 +509,9 @@ public class ScreenImpl implements Screen {
             dirtyLowLine  = Integer.MAX_VALUE;
             dirtyHighLine = Integer.MIN_VALUE;
 
-            requestRefresh(true);
-            
-            resizeDetected(newSize);
+            requestRefreshWholeScreen(       );
+
+            resizeDetected           (newSize);
         }
     }
 
@@ -384,15 +520,20 @@ public class ScreenImpl implements Screen {
             lock.lock();
             try {
                 newScreenSize.set(newSize);
-                requestRefresh(true);
+                requestRefreshWholeScreen();
             } finally {
                 lock.unlock();
             }
         }
     }
 
-    private void requestRefresh (boolean all) {
-        dirtyAll       = all;
+    private void requestRefresh () {
+        dirtySomething = true;
+        refreshNeededCondition.signalAll();
+    }
+
+    private void requestRefreshWholeScreen () {
+        dirtyAll       = true;
         dirtySomething = true;
         refreshNeededCondition.signalAll();
     }
@@ -423,8 +564,8 @@ public class ScreenImpl implements Screen {
                     // and refresh the screen
                     refresh();
                 }
-            } catch (InterruptedException e) {
-                DB.error("Refresher interrupted");
+            } catch (Throwable e) {
+                DB.error(e);
             } finally {
                 lock.unlock();
             }

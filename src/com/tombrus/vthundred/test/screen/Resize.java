@@ -24,7 +24,7 @@ public class Resize {
                 @Override
                 public void run () {
                     DB.t("\n<Resizer!!>\n");
-                    screen.clear();
+                    screen.getNewScreenWriter().clear();
                     final ScreenWriter w           = screen.getNewScreenWriter();
 
                     final String       labelW      = " " +s.getX() +" ";

@@ -13,7 +13,7 @@ public class Clear {
         for (int i = 0; i<5; i++) {
             drawText();
             U.sleep(300);
-            screen.clear();
+            screen.getNewScreenWriter().clear();
             U.sleep(300);
         }
         drawText();

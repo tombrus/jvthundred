@@ -2,15 +2,15 @@ package com.tombrus.vthundred.screen;
 
 import com.tombrus.vthundred.terminal.*;
 
-final class ScreenCharacter {
+public final class ScreenCharacter {
     private final char      character;
     private final CharProps props;
 
-    ScreenCharacter (char character) {
+    public ScreenCharacter (char character) {
         this(character, CharProps.DEFAULT);
     }
 
-    ScreenCharacter (char character, CharProps props) {
+    public ScreenCharacter (char character, CharProps props) {
         this.character = character;
         this.props = props;
     }

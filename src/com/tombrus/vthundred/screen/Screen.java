@@ -7,20 +7,21 @@ import com.tombrus.vthundred.terminal.input.*;
 @SuppressWarnings({"UnusedDeclaration"})
 public interface Screen {
     Object SET_USER_CURSOR = new Object();
-    void         startScreen          (                      );
-    void         stopScreen           (                      );
 
-    TerminalXY   getScreenSize        (                      );
-    void         setUserCursor        (TerminalXY    loc     );
-    void         setBackgroundColor   (Color         color   );
+    void         startScreen          (                                    );
+    void         stopScreen           (                                    );
 
-    void         clear                (                      );
-    ScreenWriter getNewScreenWriter   (                      );
-    void         run                  (Runnable      runnable);
+    TerminalXY   getScreenSize        (                                    ); //TODO:move to ScreenWriter
+    void         setBackgroundColor   (Color         color                 ); //TODO:move to ScreenWriter
+    void         run                  (Runnable      runnable              ); //TODO:move to ScreenWriter
 
-    void         addResizeListener    (ResizeHandler handler );
-    void         removeResizeListener (ResizeHandler handler );
+    ScreenWriter getNewScreenWriter   (                                    );
+    ScreenWriter getNewScreenWriter   (int           x, int y, int w, int h);
 
-    void         addKeyHandler        (KeyHandler    h       );
-    void         removeKeyHandler     (KeyHandler    h       );
+    void         addResizeListener    (ResizeHandler handler               );
+    void         removeResizeListener (ResizeHandler handler               );
+
+    void         setUserCursor        (TerminalXY    loc                   );
+    void         addKeyHandler        (KeyHandler    h                     );
+    void         removeKeyHandler     (KeyHandler    h                     );
 }
