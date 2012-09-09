@@ -1,6 +1,7 @@
 package com.tombrus.vthundred.screen;
 
 import com.tombrus.vthundred.terminal.*;
+import com.tombrus.vthundred.terminal.CharProps.*;
 
 public final class ScreenCharacter {
     private final char      character;
@@ -13,6 +14,10 @@ public final class ScreenCharacter {
     public ScreenCharacter (char character, CharProps props) {
         this.character = character;
         this.props = props;
+    }
+
+    public ScreenCharacter (char character, Color fg, Color bg) {
+        this(character, fg.getFgChanger().change(bg.getBgChanger().change(CharProps.DEFAULT)));
     }
 
     public char getCharacter () {

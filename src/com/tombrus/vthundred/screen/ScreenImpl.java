@@ -142,11 +142,11 @@ public class ScreenImpl implements Screen {
                 for (int line = fy; line<ty; line++) {
                     Arrays.fill(requestedScreen[line], fx, tx, sc);
                     Arrays.fill(dirtyChars[line], fx, tx, true   );
-                    dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx-1);
+                    dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx -1);
                     dirtyLowChar[line]  = Math.min(dirtyLowChar[line], fx);
                     dirtyLine[line]     = true;
                 }
-                dirtyHighLine  = Math.max(dirtyHighLine, ty-1);
+                dirtyHighLine  = Math.max(dirtyHighLine, ty -1);
                 dirtyLowLine   = Math.min(dirtyLowLine, fy);
                 dirtySomething = true;
 
@@ -183,11 +183,11 @@ public class ScreenImpl implements Screen {
                             Arrays.fill(trgLine, fx, tx, null);
                         }
                         Arrays.fill(dirtyChars[line], fx, tx, true);
-                        dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx-1);
+                        dirtyHighChar[line] = Math.max(dirtyHighChar[line], tx -1);
                         dirtyLowChar[line]  = Math.min(dirtyLowChar[line], fx);
                         dirtyLine[line]     = true;
                     }
-                    dirtyHighLine  = Math.max(dirtyHighLine, ty-1);
+                    dirtyHighLine  = Math.max(dirtyHighLine, ty -1);
                     dirtyLowLine   = Math.min(dirtyLowLine, fy);
                     dirtySomething = true;
                 }
@@ -196,14 +196,15 @@ public class ScreenImpl implements Screen {
         });
     }
 
-    private void border (final int x, final int y, final int w, final int h, final CharProps p) {
+    private void border (final int x, final int y, final int w, final int h, final Color c) {
         run(new Runnable() {
             @Override
             public void run () {
-                final int fx = limit(0, x, currentScreenSizeX    );
-                final int fy = limit(0, y, currentScreenSizeY    );
-                final int tx = limit(fx, x +w, currentScreenSizeX);
-                final int ty = limit(fy, y +h, currentScreenSizeY);
+                final CharProps p  = c.getFgChanger().change(CharProps.DEFAULT);
+                final int       fx = limit(0, x, currentScreenSizeX    );
+                final int       fy = limit(0, y, currentScreenSizeY    );
+                final int       tx = limit(fx, x +w, currentScreenSizeX);
+                final int       ty = limit(fy, y +h, currentScreenSizeY);
 
                 setReqChar(fx, fy, AnsiGraphics.SINGLE_LINE_UP_LEFT_CORNER, p);
                 for (int xx = fx+1; xx<tx-1; xx++) {
@@ -219,6 +220,7 @@ public class ScreenImpl implements Screen {
                     setReqChar(xx, ty -1, AnsiGraphics.SINGLE_LINE_HORIZONTAL, p);
                 }
                 setReqChar(tx -1, ty -1, AnsiGraphics.SINGLE_LINE_LOW_RIGHT_CORNER, p);
+                requestRefresh();
             }
         });
     }
@@ -276,10 +278,11 @@ public class ScreenImpl implements Screen {
         private final int          subY;
         private final int          subW;
         private final int          subH;
-        private       int          cursorX;
-        private       int          cursorY;
-        private       CharProps    cursorProps  = CharProps.DEFAULT;
         private       TabBehaviour tabBehaviour = TabBehaviour.ALIGN_4;
+
+        private       int          currentX;
+        private       int          currentY;
+        private       CharProps    currentProps = CharProps.DEFAULT;
 
         public ScreenWriterImpl (int subX, int subY, int subW, int subH) {
             this.subX = subX;
@@ -307,40 +310,40 @@ public class ScreenImpl implements Screen {
                     if (o instanceof Integer) {
                         int xy = (Integer) o;
                         if (intIsX) {
-                            cursorX = Math.max(0, Math.min(xy, subW -1));
+                            currentX = Math.max(0, Math.min(xy, subW -1));
                         }else {
-                            cursorY = Math.max(0, Math.min(xy, subH -1));
+                            currentY = Math.max(0, Math.min(xy, subH -1));
                         }
                         intIsX = !intIsX;
                     }else if (o instanceof TerminalXY) {
                         TerminalXY xy = (TerminalXY) o;
-                        cursorX = Math.max(0, Math.min(xy.getX(), subW -1));
-                        cursorY = Math.max(0, Math.min(xy.getY(), subH -1));
-                        intIsX  = true;
+                        currentX = Math.max(0, Math.min(xy.getX(), subW -1));
+                        currentY = Math.max(0, Math.min(xy.getY(), subH -1));
+                        intIsX   = true;
                     }else if (o instanceof CharProps) {
-                        cursorProps = (CharProps) o;
-                        intIsX      = true;
+                        currentProps = (CharProps) o;
+                        intIsX       = true;
                     }else if (o instanceof CharPropsChanger) {
-                        cursorProps = ((CharPropsChanger) o).change(cursorProps);
-                        intIsX      = true;
+                        currentProps = ((CharPropsChanger) o).change(currentProps);
+                        intIsX       = true;
                     }else if (o ==SET_USER_CURSOR) {
-                        setUserCursor(new TerminalXY(subX +cursorX, subY +cursorY));
+                        setUserCursor(new TerminalXY(subX +currentX, subY +currentY));
                     }else {
-                        if (0 <=cursorY && cursorY <subH) {
+                        if (0 <=currentY && currentY <subH) {
                             String str = o ==null ? "null" : o.toString();
-                            str = tabBehaviour.replaceTabs(str, cursorX);
+                            str = tabBehaviour.replaceTabs(str, currentX);
                             for (char c : str.toCharArray()) {
                                 if (c =='\n') {
-                                    cursorX = 0;
-                                    if (cursorY <subH -1) {
-                                        cursorY++;
+                                    currentX = 0;
+                                    if (currentY <subH -1) {
+                                        currentY++;
                                     }else {
                                         scrollUp();
-                                        clear(0, subH -1, subW, 1);
+                                        ScreenImpl.this.fill(0, subH -1, subW, 1, new ScreenCharacter(' ', currentProps));
                                     }
-                                }else if (0 <=cursorX && cursorX <subW) {
-                                    setReqChar(subX +cursorX, subY +cursorY, c, cursorProps);
-                                    cursorX++;
+                                }else if (0 <=currentX && currentX <subW) {
+                                    setReqChar(subX +currentX, subY +currentY, c, currentProps);
+                                    currentX++;
                                 }
                             }
                         }
@@ -356,23 +359,23 @@ public class ScreenImpl implements Screen {
         }
 
         @Override
-        public void clear () {
-            fill(null);
+        public void fill () {
+            fill(Color.DEFAULT);
         }
 
         @Override
-        public void clear (int x, int y, int w, int h) {
-            fill(x, y, w, h, null);
+        public void fill (Color bg) {
+            fill(' ', Color.DEFAULT, bg);
         }
 
         @Override
-        public void fill (ScreenCharacter sc) {
-            fill(0, 0, subW, subH, sc);
+        public void fill (char c) {
+            fill(c, Color.DEFAULT, Color.DEFAULT);
         }
 
         @Override
-        public void fill (int x, int y, int w, int h, ScreenCharacter sc) {
-            ScreenImpl.this.fill(subX +x, subY +y, w, h, sc);
+        public void fill (char c, Color fg, Color bg) {
+            ScreenImpl.this.fill(subX, subY, subW, subH, new ScreenCharacter(c, fg, bg));
         }
 
         @Override
@@ -381,8 +384,8 @@ public class ScreenImpl implements Screen {
         }
 
         @Override
-        public void border (CharProps p) {
-            ScreenImpl.this.border(subX -1, subY -1, subW +2, subH +2, p);
+        public void border (Color c) {
+            ScreenImpl.this.border(subX -1, subY -1, subW +2, subH +2, c);
         }
     }
 

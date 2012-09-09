@@ -7,6 +7,7 @@ import com.tombrus.vthundred.terminal.input.*;
 import com.tombrus.vthundred.terminal.input.Key.*;
 import com.tombrus.vthundred.util.*;
 
+import java.util.*;
 import java.util.concurrent.atomic.*;
 
 public class U {
@@ -45,9 +46,10 @@ public class U {
 
     public static void waitForStop (Object ts) {
         if (ts instanceof Terminal) {
-            ((Terminal)ts).startTerminal();
-        } else if (ts instanceof Screen) {
-            ((Screen) ts).startScreen();;
+            ((Terminal) ts).startTerminal();
+        }else if (ts instanceof Screen) {
+            ((Screen) ts).startScreen();
+            ;
         }
         synchronized (stop) {
             while (!stop.get()) {
@@ -69,6 +71,10 @@ public class U {
 
     private static boolean isQuit (Key key) {
         return key.getKind() ==Kind.NormalKey && key.getCharacter() =='q';
+    }
+
+    public static Color getRandomColor () {
+        return Color.values()[new Random().nextInt(Color.MAX_COLOR_CODE+1)];
     }
 
     private static class StopTerminalHandler implements KeyHandler {
@@ -107,7 +113,7 @@ public class U {
         }
 
         private void msg (Key key) {
-            if (key!=null) {
+            if (key !=null) {
                 switch (key.getKind()) {
                 case F1:
                     s.setBackgroundColor(Color.DEFAULT);

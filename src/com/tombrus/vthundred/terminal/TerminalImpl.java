@@ -179,7 +179,7 @@ public class TerminalImpl implements Terminal {
         try {
             lockWithStartIfNeeded();
             final CharProps prev = requestedProps;
-            requestedProps = CharProps.getChangerForBg(background).change(requestedProps);
+            requestedProps = background.getBgChanger().change(requestedProps);
             effectuateProps();
             writeControlSeq(type.getClearSeq());
             requestedProps = prev;

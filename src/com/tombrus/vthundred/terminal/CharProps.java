@@ -240,14 +240,6 @@ public final class CharProps {
             BG_DEFAULT,
                        };
 
-    public static CharPropsChanger getChangerForFg (Color background) {
-        return CHANGER_FOR_FG[background.getCode()];
-    }
-
-    public static CharPropsChanger getChangerForBg (Color background) {
-        return CHANGER_FOR_BG[background.getCode()];
-    }
-
     public static enum Color {
                                     BLACK(0),
                                     RED(1),
@@ -257,15 +249,17 @@ public final class CharProps {
                                     MAGENTA(5),
                                     CYAN(6),
                                     WHITE(7),
+                                    SPARE(8),
                                     DEFAULT(9);
 
         public  static final int    MAX_COLOR_CODE = 9;
+
         private              String codeAsString;
         private              int    code;
 
         private Color (int code) {
             this.code         = code;
-            this.codeAsString = "" +code;
+            this.codeAsString = Integer.toString(code);
         }
 
         public int getCode () {
@@ -274,6 +268,14 @@ public final class CharProps {
 
         public String getCodeAsString () {
             return codeAsString;
+        }
+
+        public CharPropsChanger getFgChanger () {
+            return CHANGER_FOR_FG[code];
+        }
+
+        public CharPropsChanger getBgChanger () {
+            return CHANGER_FOR_BG[code];
         }
     }
 
