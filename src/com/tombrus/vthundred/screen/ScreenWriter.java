@@ -1,5 +1,6 @@
 package com.tombrus.vthundred.screen;
 
+import com.tombrus.vthundred.terminal.*;
 import com.tombrus.vthundred.terminal.CharProps.*;
 
 public interface ScreenWriter {
@@ -11,4 +12,5 @@ public interface ScreenWriter {
     void fill            (char         c, Color fg, Color bg);
     void scrollUp        (                                  );
     void border          (Color        fg                   );
+    TerminalXY getCurrentPos ();
 }

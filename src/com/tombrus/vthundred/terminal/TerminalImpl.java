@@ -49,36 +49,38 @@ public class TerminalImpl implements Terminal {
             lockWithStartIfNeeded();
             boolean intIsX = true;
             for (Object o : a) {
-                if (o instanceof Integer) {
-                    int xy = (Integer) o;
-                    if (intIsX) {
-                        requestedX = xy;
+                if (running) {
+                    if (o instanceof Integer) {
+                        int xy = (Integer) o;
+                        if (intIsX) {
+                            requestedX = xy;
+                        }else {
+                            requestedY = xy;
+                        }
+                        intIsX = !intIsX;
+                    }else if (o instanceof Boolean) {
+                        requestedCursorOn = (Boolean) o;
+                    }else if (o instanceof TerminalXY) {
+                        TerminalXY xy = (TerminalXY) o;
+                        requestedX = xy.getX();
+                        requestedY = xy.getY();
+                        intIsX     = true;
+                    }else if (o instanceof CharProps) {
+                        requestedProps = (CharProps) o;
+                        intIsX         = true;
+                    }else if (o instanceof CharPropsChanger) {
+                        requestedProps = ((CharPropsChanger) o).change(requestedProps);
+                        intIsX         = true;
                     }else {
-                        requestedY = xy;
+                        String str = o ==null ? "null" : o.toString();
+                        effectuateRequestedPosAndProps();
+                        DB.t(str);
+                        graphWriter.write(str);
+                        //TODO: take care of not so simple chars (CR/LF/FF/TAB) and writing past the edge of the screen (wrap?)!
+                        currentX   += str.length();
+                        requestedX += str.length();
+                        intIsX     =  true;
                     }
-                    intIsX = !intIsX;
-                }else if (o instanceof Boolean) {
-                    requestedCursorOn = (Boolean) o;
-                }else if (o instanceof TerminalXY) {
-                    TerminalXY xy = (TerminalXY) o;
-                    requestedX = xy.getX();
-                    requestedY = xy.getY();
-                    intIsX     = true;
-                }else if (o instanceof CharProps) {
-                    requestedProps = (CharProps) o;
-                    intIsX         = true;
-                }else if (o instanceof CharPropsChanger) {
-                    requestedProps = ((CharPropsChanger) o).change(requestedProps);
-                    intIsX         = true;
-                }else {
-                    String str = o ==null ? "null" : o.toString();
-                    effectuateRequestedPosAndProps();
-                    DB.t(str);
-                    graphWriter.write(str);
-                    //TODO: take care of not so simple chars (CR/LF/FF/TAB) and writing past the edge of the screen (wrap?)!
-                    currentX   += str.length();
-                    requestedX += str.length();
-                    intIsX     =  true;
                 }
             }
         } catch (IOException e) {
@@ -134,7 +136,7 @@ public class TerminalImpl implements Terminal {
             if (!running) {
                 running = true;
                 try {
-                    DB.t("\n<start>\n");
+                    DB.t("\n<start>\n"     );
                     startActions();
                     DB.t("\n<start-done>\n");
                 } catch (IOException e) {
@@ -292,8 +294,8 @@ public class TerminalImpl implements Terminal {
         try {
             lockWithStartIfNeeded();
             DB.t("\n<probeTerminalSize>\n");
-            final CountDownLatch latch    = new                  CountDownLatch(1);
-            final ResizeHandler handler = new ResizeHandler() {
+            final CountDownLatch latch   = new                 CountDownLatch(1);
+            final ResizeHandler  handler = new ResizeHandler() {
                 public void handleResize (TerminalXY newSize) {
                     //DB.t("\n<latch downed>\n");
                     latch.countDown();

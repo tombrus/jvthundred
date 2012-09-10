@@ -326,6 +326,9 @@ public class ScreenImpl implements Screen {
                     }else if (o instanceof CharPropsChanger) {
                         currentProps = ((CharPropsChanger) o).change(currentProps);
                         intIsX       = true;
+                    }else if (o instanceof Color) {
+                        currentProps = ((Color) o).getFgChanger().change(currentProps);
+                        intIsX       = true;
                     }else if (o ==SET_USER_CURSOR) {
                         setUserCursor(new TerminalXY(subX +currentX, subY +currentY));
                     }else {
@@ -334,12 +337,13 @@ public class ScreenImpl implements Screen {
                             str = tabBehaviour.replaceTabs(str, currentX);
                             for (char c : str.toCharArray()) {
                                 if (c =='\n') {
-                                    currentX = 0;
                                     if (currentY <subH -1) {
+                                        currentX = 0;
                                         currentY++;
+                                    }else if (subH <=1) {
+                                        fill();
                                     }else {
                                         scrollUp();
-                                        ScreenImpl.this.fill(0, subH -1, subW, 1, new ScreenCharacter(' ', currentProps));
                                     }
                                 }else if (0 <=currentX && currentX <subW) {
                                     setReqChar(subX +currentX, subY +currentY, c, currentProps);
@@ -376,16 +380,24 @@ public class ScreenImpl implements Screen {
         @Override
         public void fill (char c, Color fg, Color bg) {
             ScreenImpl.this.fill(subX, subY, subW, subH, new ScreenCharacter(c, fg, bg));
+            currentX = 0;
+            currentY = 0;
         }
 
         @Override
         public void scrollUp () {
             ScreenImpl.this.scrollUp(subX, subY, subW, subH, 1);
+            currentX = 0;
         }
 
         @Override
         public void border (Color c) {
             ScreenImpl.this.border(subX -1, subY -1, subW +2, subH +2, c);
+        }
+
+        @Override
+        public TerminalXY getCurrentPos () {
+            return new TerminalXY(currentX, currentY);
         }
     }
 
